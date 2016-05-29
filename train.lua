@@ -25,13 +25,14 @@ Naturally, these are the playground of optim
   confusion = optim.ConfusionMatrix(43)
 
 -- this is a lua table, passed to optim for configuring the optimizer.
-
-  optimState = {
+optimState = {
       learningRate = 0.1,
+      learningRateDecay = 0.0,
       momentum = 0.9,
-      weightDecay = 1e-5,
-  }
-
+      nesterov = true,
+      dampening = 0.0,
+      weightDecay = 1e-6,
+   }
 
 -- The cross entropy loss function, criterion.output stores the loss from the latest criterion:forward() call.
 
@@ -40,8 +41,10 @@ Naturally, these are the playground of optim
 
 if cuda == true then
   require 'cunn'
-  criterion = criterion:cuda()
+  require 'cudnn' 
+ criterion = criterion:cuda()
   model = model:cuda()
+  cudnn.convert(model,cudnn)
 end
 
 --[[
@@ -62,12 +65,14 @@ function train(epoch)
 --[[
 function which returns the loss and the gradParameters(updates to be made to parameters),    internally called by optim.
 --]]
-    local function feval()
+    local function feval(x)
+	if x ~= parameters then parameters:copy(x) end
         return criterion.output, gradParameters
     end
+    local training_loss = 0
     local trSize = data:getTrainDataSize()
     local trIndex = 0
-    for inputs,targets in data:TrainGenerator() do
+    for inputs,targets in data:TrainGenerator(128) do
         trIndex = trIndex + inputs:size(1)
         xlua.progress(trIndex,trSize)
 
@@ -75,19 +80,21 @@ function which returns the loss and the gradParameters(updates to be made to par
           inputs = inputs:cuda()
           targets = targets:cuda()
         end
-
+	
 --      we don't want to keep updates from the prev batch.
         gradParameters:zero()
         local outputs = model:forward(inputs)
         local loss = criterion:forward(outputs, targets)
         local dloss_dx = criterion:backward(outputs, targets)
-        model:backward(inputs, dloss_dx)
+        training_loss = training_loss + loss*inputs:size(1)
+	model:backward(inputs, dloss_dx)
         confusion:batchAdd(outputs, targets)
         optim.sgd(feval,parameters,optimState)
     end
 --  Book keeping
     confusion:updateValids()
     train_acc = confusion.totalValid * 100
+    print('Train Loss: '..training_loss/trSize)
     print(('Train accuracy: %.2f'):format(train_acc))
     confusion:zero()
     epoch = epoch + 1
@@ -100,8 +107,8 @@ function test()
     model:evaluate()
     local teSize = data:getTestDataSize()
     local teIndex = 0
-    for inputs,targets in data:TestGenerator() do
-      teIndex = teIndex + index:size(1)
+    for inputs,targets in data:TestGenerator(128) do
+      teIndex = teIndex + inputs:size(1)
       xlua.progress(teIndex,teSize)
       if cuda == true then
         inputs = inputs:cuda()
