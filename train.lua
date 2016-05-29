@@ -8,7 +8,7 @@ cuda = true
 
 -- loading the data
 dofile 'dataGen.lua'
-data = torch.load('/fast_data/gtsrb.tutorial/data.t7')
+data = Data()
 
 -- loading the model
 model = dofile 'model.lua'
@@ -43,10 +43,12 @@ optimState = {
 if cuda == true then
   require 'cunn'
   require 'cudnn'
- criterion = criterion:cuda()
+  criterion = criterion:cuda()
   model = model:cuda()
   cudnn.convert(model,cudnn)
 end
+
+print(model)
 
 --[[
 This function trains the model for one epoch. The loop iterates over the train data in batches, performs forward on the model,
