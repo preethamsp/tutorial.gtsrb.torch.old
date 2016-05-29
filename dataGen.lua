@@ -3,7 +3,7 @@ Loads from files with extensions 'jpg', 'png','JPG','PNG','JPEG', 'ppm', 'PPM', 
 --]]
 
 require 'paths'
-local t = require 'datasets/transforms.lua'
+local t = require 'transforms.lua'
 
 local DataGen = torch.class 'DataGen'
 
@@ -11,8 +11,8 @@ function DataGen:__init(path)
     -- path is path of directory containing 'train' and 'val' folders
     torch.setnumthreads(1)
     self.rootPath = path
-    self.trainImgPaths = self.findImages(paths.concat(self.rootPath, 'train'))
-    self.valImgPaths = self.findImages(paths.concat(self.rootPath, 'val'))
+    self.trainImgPaths = self.findImages(paths.concat(self.rootPath, 'Final_Training/Images'))
+    self.valImgPaths = self.findImages(paths.concat(self.rootPath, 'Final_Test/Images'))
     self.nbTrainExamples = #self.trainImgPaths
     self.nbValExamples = #self.valImgPaths 
 end
@@ -46,7 +46,7 @@ function DataGen:generator(pathsList, batchSize, preprocess)
             end
          end
          
-        local X = torch.Tensor(#imgList, 3, 224, 224)
+        local X = torch.Tensor(#imgList, 3, 48, 48)
         local Y = torch.Tensor(#clsList)
         for j = 1, #imgList do
             X[j] = imgList[j]
@@ -70,7 +70,7 @@ function DataGen:trainGenerator(batchSize)
             saturation = 0.4,
         }),
         t.Lighting(0.1, t.pca.eigval, t.pca.eigvec),  -- PCA based color data augmentation(as in alexnet paper)
-        t.ColorNormalize(t.meanstd)
+        t.ColorNormalize(t.meanstd),
         t.CenterCrop(48)
       }
 

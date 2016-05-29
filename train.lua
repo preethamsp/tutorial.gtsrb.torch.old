@@ -78,7 +78,6 @@ function train(epoch)
   Internally called by optim.
   --]]
   local function feval(x)
-    if x ~= parameters then parameters:copy(x) end
     return criterion.output, gradParameters
   end
 
