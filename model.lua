@@ -1,9 +1,10 @@
 require 'nn'
 nbClasses = 43
 net = nn.Sequential()
---[[building block, adds a convolution layer, batch norm layer and a relu activation to the net]]--
+
+-- building block, adds a convolution layer and a relu activation to the net
 function ConvBNReLU(nInputPlane, nOutputPlane)
--- kernel size = (3,3), stride = (1,1), padding = (1,1)
+	-- kernel size = (3,3), stride = (1,1), padding = (1,1)
   net:add(nn.SpatialConvolution(nInputPlane, nOutputPlane, 3,3, 1,1, 1,1))
   net:add(nn.ReLU(true))
 end

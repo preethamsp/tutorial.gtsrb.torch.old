@@ -1,67 +1,123 @@
-require 'image'
-require 'nn'
-local t = require 'transforms.lua'
+--[[
+Loads from files with extensions 'jpg', 'png','JPG','PNG','JPEG', 'ppm', 'PPM', 'bmp', 'BMP'
+--]]
 
-local Data = torch.class 'Data'
+require 'paths'
+local t = require 'datasets/transforms.lua'
 
-function Data:__init()
-  dataset = dofile 'dataset.lua'
-  dataset.download_generate_bin()
-  self.trainData = dataset.get_train_dataset()
-  self.testData = dataset.get_test_dataset()
+local DataGen = torch.class 'DataGen'
 
+function DataGen:__init(path)
+    -- path is path of directory containing 'train' and 'val' folders
+    torch.setnumthreads(1)
+    self.rootPath = path
+    self.trainImgPaths = self.findImages(paths.concat(self.rootPath, 'train'))
+    self.valImgPaths = self.findImages(paths.concat(self.rootPath, 'val'))
+    self.nbTrainExamples = #self.trainImgPaths
+    self.nbValExamples = #self.valImgPaths 
 end
 
-function Data:TrainGenerator(batchSize)
-  batchSize = batchSize or 32
-  local indices = torch.randperm(self.trainData.data:size(1)):long():split(batchSize)
-  local idx = 0
-  local trainPreprocess = t.Compose{
-      t.ColorJitter({
-          brightness = 0.4,
-          contrast = 0.4,
-          saturation = 0.4,
-      }),
-      t.Lighting(0.1, t.pca.eigval, t.pca.eigvec),
-      t.ColorNormalize(t.meanstd)}
+local function getClass(path)
+    local className = paths.basename(paths.dirname(path))
+    return tonumber(className) + 1
+end
 
-  return function()
-    idx = idx + 1
-    if idx <= #indices then
-      local X = self.trainData.data:index(1,indices[idx])
-      for i = 1,X:size(1) do
-        X[i] = trainPreprocess(X[i])
+
+function DataGen:generator(pathsList, batchSize, preprocess) 
+   batchSize = batchSize or 32
+   
+   local pathIndices = torch.randperm(#pathsList)
+   local batches = pathIndices:split(batchSize)
+   local i = 1
+   local function iterator()
+      if i <= #batches then
+         local currentBatch = batches[i]         
+         local imgList = {}
+         local clsList = {}
+
+         for j = 1, currentBatch:size(1) do
+            local currentPath = pathsList[currentBatch[j]]
+            local currentClass = getClass(currentPath)
+            local ok, img = pcall(function() return t.loadImage(currentPath) end)
+             if ok then
+                if preprocess then img = preprocess(img) end
+                table.insert(imgList, img)
+                table.insert(clsList, currentClass)
+            end
+         end
+         
+        local X = torch.Tensor(#imgList, 3, 224, 224)
+        local Y = torch.Tensor(#clsList)
+        for j = 1, #imgList do
+            X[j] = imgList[j]
+            Y[j] = clsList[j]
+        end
+         
+         i = i + 1
+         return X, Y
       end
-      local Y = self.trainData.label:index(1,indices[idx])
-      return X,Y
-    end
-  end
+   end
+   return iterator
 end
 
-function Data:TestGenerator(batchSize)
-  batchSize = batchSize or 32
-  local indices = torch.range(1,self.testData.data:size(1)):long():split(batchSize)
-  local idx = 0
-  local testPreprocess = t.Compose{
-       t.ColorNormalize(t.meanstd),
-     }
-  return function()
-    idx = idx + 1
-    if idx <= #indices then
-      local X = self.testData.data:index(1,indices[idx])
-      for i = 1,X:size(1) do
-        X[i] = testPreprocess(X[i])
-      end
-      local Y = self.testData.label:index(1,indices[idx])
-      return X,Y
-    end
-  end
+
+function DataGen:trainGenerator(batchSize)
+    local trainPreprocess = t.Compose{
+        t.Scale(48),
+        t.ColorJitter({   -- color related data augmentation
+            brightness = 0.4,
+            contrast = 0.4,
+            saturation = 0.4,
+        }),
+        t.Lighting(0.1, t.pca.eigval, t.pca.eigvec),  -- PCA based color data augmentation(as in alexnet paper)
+        t.ColorNormalize(t.meanstd)
+        t.CenterCrop(48)
+      }
+
+   return self:generator(self.trainImgPaths, batchSize, trainPreprocess)
 end
 
-function Data:getTrainDataSize()
-  return self.trainData.data:size(1)
+
+function DataGen:valGenerator(batchSize)
+    local valPreprocess = t.Compose{
+         t.Scale(48),
+         t.ColorNormalize(t.meanstd),
+         t.CenterCrop(48)}
+   return self:generator(self.valImgPaths, batchSize, valPreprocess)
 end
 
-function Data:getTestDataSize()
-  return self.testData.data:size(1)
+
+function DataGen.findImages(dir)
+   --[[--
+   Returns a table with all the image paths found in dir. Uses find.
+   Following extensions are used to filter images: 'jpg', 'png','JPG','PNG','JPEG', 'ppm', 'PPM', 'bmp', 'BMP'
+   --]]--
+
+   ----------------------------------------------------------------------
+   -- Options for the GNU and BSD find command
+   local extensionList = {'jpg', 'png','JPG','PNG','JPEG', 'ppm', 'PPM', 'bmp', 'BMP'}
+   local findOptions = ' -iname "*.' .. extensionList[1] .. '"'
+   for i=2,#extensionList do
+      findOptions = findOptions .. ' -o -iname "*.' .. extensionList[i] .. '"'
+   end
+
+   -- Find all the images using the find command
+   local f = io.popen('find -L ' .. dir .. findOptions)
+
+   local maxLength = -1
+   local imagePaths = {}
+
+   -- Generate a list of all the images and their class
+   while true do
+      local line = f:read('*line')
+      if not line then break end
+
+      local filename = paths.basename(line)
+      local path = paths.dirname(line).. '/' .. filename
+      table.insert(imagePaths, path)
+   end
+
+   f:close()
+
+   return imagePaths
 end
