@@ -6,7 +6,7 @@ require 'xlua' -- for progress bars and other graphics
 cuda = true
 
 -- loading the data
-datagen = dofile 'datagen.lua'
+datagen = dofile 'dataGen.lua'
 data = Data()
 
 -- loading the model
@@ -42,7 +42,6 @@ if cuda == true then
   require 'cunn'
   criterion = criterion:cuda()
   model = model:cuda()
-  confusion = confusion:cuda()
 end
 
 --[[
