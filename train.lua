@@ -39,6 +39,7 @@ Naturally, these are the playground of optim
 
 
 if cuda == true then
+  require 'cunn'
   criterion = criterion:cuda()
   model = model:cuda()
   confusion = confusion:cuda()
