@@ -73,14 +73,6 @@ function train(epoch)
       optimState.learningRate = optimState.learningRate/2
   end
 
-  --[[
-  Function which returns the loss and the gradParameters(updates to be made to parameters).
-  Internally called by optim.
-  --]]
-  local function feval(x)
-    return criterion.output, gradParameters
-  end
-
   local training_loss = 0
   local trSize = dgen.nbTrainExamples
   local trIndex = 0
@@ -95,18 +87,29 @@ function train(epoch)
         targets = targets:cuda()
       end
 
-      -- We don't want to keep updates from the prev batch. So clear it.
-      gradParameters:zero()
-      
-      -- core of the training
-      local outputs = model:forward(inputs)
-      local loss = criterion:forward(outputs, targets)
-      local dloss_dx = criterion:backward(outputs, targets)
-      model:backward(inputs, dloss_dx)
-      optim.sgd(feval,parameters,optimState)
+      --[[
+      Function which returns the loss and the gradParameters(updates to be made to parameters).
+      Internally called by optim.
+      --]]
+ 
+      local function feval(x)
+        if x ~= parameters then parameters:copy(x) end
 
-      training_loss = training_loss + loss*inputs:size(1)
-      confusion:batchAdd(outputs, targets)
+        -- We don't want to keep updates from the prev batch. So clear it.
+        gradParameters:zero()
+      
+        -- core of the training
+        local outputs = model:forward(inputs)
+        local loss = criterion:forward(outputs, targets)
+        local dloss_dx = criterion:backward(outputs, targets)
+        model:backward(inputs, dloss_dx)
+
+        confusion:batchAdd(outputs, targets)
+      end
+
+      _,fs = optim.sgd(feval,parameters,optimState)
+      training_loss = training_loss + fs[#fs] * inputs:size(1)
+      
       collectgarbage()
   end
 
