@@ -1,3 +1,6 @@
+require 'image'
+require 'nn'
+
 
 local Data = torch.class 'Data'
 
@@ -6,9 +9,6 @@ function Data:__init()
   dataset.download_generate_bin()
   self.trainData = dataset.get_train_dataset()
   self.testData = dataset.get_test_dataset()
-
-  self:normalize_local(self.trainData)
-  self:normalize_local(self.testData)
 
 end
 
@@ -49,7 +49,7 @@ function Data:getTestDataSize()
 end
 
 function Data:normalize_local(dataset)
-  require 'image'
+
   local norm_kernel = image.gaussian1D(7)
   local norm = nn.SpatialContrastiveNormalization(3,norm_kernel)
   local batch = 200 -- Can be reduced if you experience memory issues
@@ -59,6 +59,58 @@ function Data:normalize_local(dataset)
     local normalized_images = norm:forward(dataset.data:narrow(1,i,local_batch))
     dataset.data:narrow(1,i,local_batch):copy(normalized_images)
   end
+end
+
+function Data:normalize()
+    local trainData = self.trainData
+    local testData = self.testData
+
+    print '<trainer> preprocessing data (color space + normalization)'
+    collectgarbage()
+
+    -- preprocess trainSet
+    local normalization = nn.SpatialContrastiveNormalization(1, image.gaussian1D(7))
+    for i = 1,trainData.data:size(1) do
+       xlua.progress(i, trainData.data:size(1))
+       -- rgb -> yuv
+       local rgb = trainData.data[i]
+       local yuv = image.rgb2yuv(rgb)
+       -- normalize y locally:
+       yuv[1] = normalization(yuv[{{1}}])
+       trainData.data[i] = yuv
+    end
+    -- normalize u globally:
+    local mean_u = trainData.data:select(2,2):mean()
+    local std_u = trainData.data:select(2,2):std()
+    trainData.data:select(2,2):add(-mean_u)
+    trainData.data:select(2,2):div(std_u)
+    -- normalize v globally:
+    local mean_v = trainData.data:select(2,3):mean()
+    local std_v = trainData.data:select(2,3):std()
+    trainData.data:select(2,3):add(-mean_v)
+    trainData.data:select(2,3):div(std_v)
+
+    trainData.mean_u = mean_u
+    trainData.std_u = std_u
+    trainData.mean_v = mean_v
+    trainData.std_v = std_v
+
+    -- preprocess testSet
+    for i = 1,testData.data:size(1) do
+      xlua.progress(i, testData.data:size(1))
+       -- rgb -> yuv
+       local rgb = testData.data[i]
+       local yuv = image.rgb2yuv(rgb)
+       -- normalize y locally:
+       yuv[{1}] = normalization(yuv[{{1}}])
+       testData.data[i] = yuv
+    end
+    -- normalize u globally:
+    testData.data:select(2,2):add(-mean_u)
+    testData.data:select(2,2):div(std_u)
+    -- normalize v globally:
+    testData.data:select(2,3):add(-mean_v)
+    testData.data:select(2,3):div(std_v)
 end
 
 

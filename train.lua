@@ -5,9 +5,10 @@ require 'xlua' -- for progress bars and other graphics
 -- Enable this flag if you have a cuda capable gpu and have cunn installed.
 cuda = true
 
+
 -- loading the data
-datagen = dofile 'dataGen.lua'
-data = Data()
+dofile 'dataGen.lua'
+data = torch.load('/fast_data/gtsrb.tutorial/data.t7')
 
 -- loading the model
 model = dofile 'model.lua'
@@ -26,7 +27,7 @@ Naturally, these are the playground of optim
 
 -- this is a lua table, passed to optim for configuring the optimizer.
 optimState = {
-      learningRate = 0.1,
+      learningRate = 0.01,
       learningRateDecay = 0.0,
       momentum = 0.9,
       nesterov = true,
@@ -41,7 +42,7 @@ optimState = {
 
 if cuda == true then
   require 'cunn'
-  require 'cudnn' 
+  require 'cudnn'
  criterion = criterion:cuda()
   model = model:cuda()
   cudnn.convert(model,cudnn)
@@ -72,7 +73,7 @@ function which returns the loss and the gradParameters(updates to be made to par
     local training_loss = 0
     local trSize = data:getTrainDataSize()
     local trIndex = 0
-    for inputs,targets in data:TrainGenerator(128) do
+    for inputs,targets in data:TrainGenerator(32) do
         trIndex = trIndex + inputs:size(1)
         xlua.progress(trIndex,trSize)
 
@@ -80,16 +81,17 @@ function which returns the loss and the gradParameters(updates to be made to par
           inputs = inputs:cuda()
           targets = targets:cuda()
         end
-	
+
 --      we don't want to keep updates from the prev batch.
         gradParameters:zero()
         local outputs = model:forward(inputs)
         local loss = criterion:forward(outputs, targets)
         local dloss_dx = criterion:backward(outputs, targets)
         training_loss = training_loss + loss*inputs:size(1)
-	model:backward(inputs, dloss_dx)
+	      model:backward(inputs, dloss_dx)
         confusion:batchAdd(outputs, targets)
         optim.sgd(feval,parameters,optimState)
+        collectgarbage()
     end
 --  Book keeping
     confusion:updateValids()
