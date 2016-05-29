@@ -2,12 +2,16 @@ require 'optim'
 require 'xlua' -- for progress bars and other graphics
 
 
+-- Enable this flag if you have a cuda capable gpu and have cunn installed.
+cuda = true
+
 -- loading the data
 datagen = dofile 'datagen.lua'
 data = Data()
 
 -- loading the model
 model = dofile 'model.lua'
+-- If you have a cuda capable gpu,
 
 --[[A model's getParameters method returns
 1. parameters (A 1D tensor of all the weights of all the modules)
@@ -31,8 +35,14 @@ Naturally, these are the playground of optim
 
 -- The cross entropy loss function, criterion.output stores the loss from the latest criterion:forward() call.
 
-  criterion = nn.CrossEntropyCriterion()
+    criterion = nn.CrossEntropyCriterion()
 
+
+if cuda == true then
+  criterion = criterion:cuda()
+  model = model:cuda()
+  confusion = confusion:cuda()
+end
 
 --[[
 This function trains the model for one epoch. The loop iterates over the train data in batches, performs forward on the model,
@@ -60,6 +70,12 @@ function which returns the loss and the gradParameters(updates to be made to par
     for inputs,targets in data:TrainGenerator() do
         trIndex = trIndex + inputs:size(1)
         xlua.progress(trIndex,trSize)
+
+        if cuda == true then
+          inputs = inputs:cuda()
+          targets = targets:cuda()
+        end
+
 --      we don't want to keep updates from the prev batch.
         gradParameters:zero()
         local outputs = model:forward(inputs)
@@ -87,11 +103,18 @@ function test()
     for inputs,targets in data:TestGenerator() do
       teIndex = teIndex + index:size(1)
       xlua.progress(teIndex,teSize)
-      local outputs = model:forward(provider.testData.data:narrow(1,i,bs))
-      confusion:batchAdd(outputs, provider.testData.labels:narrow(1,i,bs))
+      if cuda == true then
+        inputs = inputs:cuda()
+        targets = targets:cuda()
+      end
+
+      local outputs = model:forward(inputs)
+      confusion:batchAdd(outputs, targets)
     end
     confusion:updateValids()
+
     local test_acc = confusion.totalValid * 100
+    confusion:zero()
     print(('Test accuracy: %.2f'):format(test_acc))
 end
 
