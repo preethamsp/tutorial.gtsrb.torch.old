@@ -7,7 +7,8 @@ function Data:__init()
   self.trainData = dataset.get_train_dataset()
   self.testData = dataset.get_test_dataset()
 
-  self:normalize_global()
+  self:normalize_local(self.trainData)
+  self:normalize_local(self.testData)
 
 end
 
@@ -46,6 +47,20 @@ end
 function Data:getTestDataSize()
   return self.testData.data:size(1)
 end
+
+function Data:normalize_local(dataset)
+  require 'image'
+  local norm_kernel = image.gaussian1D(7)
+  local norm = nn.SpatialContrastiveNormalization(3,norm_kernel)
+  local batch = 200 -- Can be reduced if you experience memory issues
+  local dataset_size = dataset.data:size(1)
+  for i=1,dataset_size,batch do
+    local local_batch = math.min(dataset_size,i+batch) - i
+    local normalized_images = norm:forward(dataset.data:narrow(1,i,local_batch))
+    dataset.data:narrow(1,i,local_batch):copy(normalized_images)
+  end
+end
+
 
 -- normalize the dataset (supress the mean and divide by standard deviation)
 function Data:normalize_global()
