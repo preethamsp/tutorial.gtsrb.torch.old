@@ -5,6 +5,9 @@ require 'xlua' -- for progress bars and other graphics
 -- Enable this flag if you have a cuda capable gpu and have cunn installed.
 cuda = true
 
+-- Enable this if you have cudnn installed.
+cudnn = true
+
 
 -- Loading the data
 require 'dataGen.lua'
@@ -12,7 +15,25 @@ dgen = DataGen('GTSRB/')
 
 -- Loading the model
 model = dofile 'model.lua'
--- If you have a cuda capable gpu,
+
+-- The cross entropy loss function, criterion.output stores the loss from the latest criterion:forward() call.
+criterion = nn.CrossEntropyCriterion()
+
+-- If you have cuda and cudnn installed, transfer the model onto gpu
+-- Convert model to use cudnn backend
+
+if cuda == true then
+  require 'cunn'
+  criterion = criterion:cuda()
+  model = model:cuda()
+end
+
+if cudnn == true then
+   require 'cudnn'
+   cudnn.convert(model,cudnn)
+end
+
+print(model)
 
 --[[A model's getParameters method returns
 1. parameters : A 1D tensor of all the weights of all the modules)
@@ -38,20 +59,7 @@ optimState = {
    }
 batch_size = 32
 
--- The cross entropy loss function, criterion.output stores the loss from the latest criterion:forward() call.
-criterion = nn.CrossEntropyCriterion()
 
-
--- Tranfer model and criterion to cuda if you have have it
-if cuda == true then
-  require 'cunn'
-  require 'cudnn'
-  criterion = criterion:cuda()
-  model = model:cuda()
-  cudnn.convert(model,cudnn)
-end
-
-print(model)
 
 --[[
 This function trains the model for one epoch. The loop iterates over the train data in batches and
